@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.symphony.poc.dynamodb</groupId>
+  <artifactId>dynamodb-poc</artifactId>
+  <version>1.0-SNAPSHOT</version>
+  <packaging>jar</packaging>
+
+  <name>AWS SDK for Java Sample</name>
+  <url>http://aws.amazon.com/sdkforjava</url>
+
+  <dependencies>
+    <dependency>
+      <groupId>com.amazonaws</groupId>
+      <artifactId>aws-java-sdk-dynamodb</artifactId>
+      <version>1.11.560</version>
+    </dependency>
+
+    <!-- https://mvnrepository.com/artifact/com.amazonaws/aws-java-sdk -->
+    <dependency>
+      <groupId>com.amazonaws</groupId>
+      <artifactId>aws-java-sdk</artifactId>
+      <version>1.11.560</version>
+    </dependency>
+  </dependencies>
+  <build>
+    <sourceDirectory>src/main</sourceDirectory>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <version>2.4</version>
+        <configuration>
+		<finalName>dynamodb-poc</finalName>
+			<transformers>
+				<transformer
+					implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+					<manifestEntries>
+						<Main-Class>DynamoDbPoc</Main-Class>
+						</manifestEntries>
+				</transformer>
+				<transformer
+					implementation="com.github.edwgiz.mavenShadePlugin.log4j2CacheTransformer.PluginsCacheFileTransformer">
+				</transformer>
+			</transformers>
+        </configuration>
+		<executions>
+			<execution>
+				<id>make-runnable-jar</id>
+				<phase>package</phase>
+				<goals>
+					<goal>shade</goal>
+				</goals>
+			</execution>
+		</executions>
+		<dependencies>
+			<dependency>
+				<groupId>com.github.edwgiz</groupId>
+				<artifactId>maven-shade-plugin.log4j2-cachefile-transformer</artifactId>
+				<version>2.7</version>
+			</dependency>
+		</dependencies>
+      </plugin>
+	<plugin>
+		<artifactId>maven-compiler-plugin</artifactId>
+		<version>3.3</version>
+		<configuration>
+			<source>1.8</source>
+			<target>1.8</target>
+		</configuration>
+	</plugin>
+    </plugins>
+  </build>
+</project>
