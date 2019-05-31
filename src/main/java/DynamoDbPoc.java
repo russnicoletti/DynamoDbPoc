@@ -80,12 +80,27 @@ public class DynamoDbPoc {
     String gsiToSearchKey =   String.format("mt:mscn:state:%s%02d999999:%s", timeBucket, to, stateString);
     String timeBucketString = "mt:mscn:state:" + timeBucket;
 
-    QuerySpec querySpec = new QuerySpec().withKeyConditionExpression("sk = :v_sk and gsisk BETWEEN :v_gsiskFrom AND :v_gsiskTo")
-        .withValueMap(new ValueMap()
-            //.withString(":v_pk", timeBucketString)
-            .withString(":v_sk", timeBucketString)
-            .withString(":v_gsiskFrom", gsiFromSearchKey)
-            .withString(":v_gsiskTo", gsiToSearchKey));
+    QuerySpec querySpec;
+
+    if (state != null) {
+      HashMap<String, String> nameMap = new HashMap<>();
+      nameMap.put("#state", "state");
+      querySpec = new QuerySpec().withKeyConditionExpression("sk = :v_sk and gsisk BETWEEN :v_gsiskFrom AND :v_gsiskTo")
+          .withProjectionExpression("#state")
+          .withFilterExpression("#state = :v_state")
+          .withNameMap(nameMap)
+          .withValueMap(new ValueMap()
+              .withString(":v_state", state)
+              .withString(":v_sk", timeBucketString)
+              .withString(":v_gsiskFrom", gsiFromSearchKey)
+              .withString(":v_gsiskTo", gsiToSearchKey));
+    } else {
+      querySpec = new QuerySpec().withKeyConditionExpression("sk = :v_sk and gsisk BETWEEN :v_gsiskFrom AND :v_gsiskTo")
+          .withValueMap(new ValueMap()
+              .withString(":v_sk", timeBucketString)
+              .withString(":v_gsiskFrom", gsiFromSearchKey)
+              .withString(":v_gsiskTo", gsiToSearchKey));
+    }
 
     String queryDisplayString = String.format("Querying using sk = %s, gsisk between %s and %s, state: %s", timeBucketString, gsiFromSearchKey, gsiToSearchKey, state != null ? state : "ALL");
     System.out.println(queryDisplayString);
