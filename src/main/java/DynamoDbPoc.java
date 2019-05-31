@@ -11,6 +11,7 @@ import com.amazonaws.services.dynamodbv2.document.spec.QuerySpec;
 import com.amazonaws.services.dynamodbv2.document.utils.ValueMap;
 import com.amazonaws.services.dynamodbv2.model.AttributeValue;
 import com.amazonaws.services.dynamodbv2.model.PutItemRequest;
+import com.amazonaws.services.pinpoint.model.Format;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -51,29 +52,32 @@ public class DynamoDbPoc {
         addItems(dynamodbClient, startingFileId, timeBucketMonth, numberOfItems);
         break;
       case "query-items":
-        if (args.length != 4) {
-          System.out.println("Usage: query-items, time-bucket month, start day, end day");
+        if (args.length != 4 && args.length != 5) {
+          System.out.println("Usage: query-items, time-bucket month, start day, end day, state (optional)");
           System.exit(0);
         }
         timeBucketMonth = Integer.valueOf(args[1]);
         int startDay = Integer.valueOf(args[2]);
         int endDay = Integer.valueOf(args[3]);
-        queryItems(dynamodbClient, timeBucketMonth, startDay, endDay);
+
+        String state = args.length == 5 ? args[4] : null;
+        queryItems(dynamodbClient, timeBucketMonth, startDay, endDay, state);
         break;
       default:
         System.out.println("Unknown action: " + action);
     }
   }
 
-  private static void queryItems(AmazonDynamoDB dynamodbClient, int timeBucketMonth, int from, int to) {
+  private static void queryItems(AmazonDynamoDB dynamodbClient, int timeBucketMonth, int from, int to, String state) {
 
     DynamoDB dynamoDB = new DynamoDB(dynamodbClient);
     Table table = dynamoDB.getTable(tableName);
     Index index = table.getIndex(gsiName);
 
+    String stateString = (state != null) ? state : "";
     String timeBucket = String.format("%d%02d", localDateTime.getYear(), timeBucketMonth);
-    String gsiFromSearchKey = String.format("mt:mscn:state:%s%02d000000", timeBucket, from);
-    String gsiToSearchKey =   String.format("mt:mscn:state:%s%02d999999", timeBucket, to);
+    String gsiFromSearchKey = String.format("mt:mscn:state:%s%02d000000:%s", timeBucket, from, stateString);
+    String gsiToSearchKey =   String.format("mt:mscn:state:%s%02d999999:%s", timeBucket, to, stateString);
     String timeBucketString = "mt:mscn:state:" + timeBucket;
 
     QuerySpec querySpec = new QuerySpec().withKeyConditionExpression("sk = :v_sk and gsisk BETWEEN :v_gsiskFrom AND :v_gsiskTo")
@@ -83,7 +87,8 @@ public class DynamoDbPoc {
             .withString(":v_gsiskFrom", gsiFromSearchKey)
             .withString(":v_gsiskTo", gsiToSearchKey));
 
-    System.out.println("Querying using sk = " + timeBucketString + ", gsisk between " + gsiFromSearchKey + " and " + gsiToSearchKey);
+    String queryDisplayString = String.format("Querying using sk = %s, gsisk between %s and %s, state: %s", timeBucketString, gsiFromSearchKey, gsiToSearchKey, state != null ? state : "ALL");
+    System.out.println(queryDisplayString);
     ItemCollection<QueryOutcome> items = index.query(querySpec);
     System.out.println("Query returned:");
    Iterator<Item> iterator = items.iterator();
