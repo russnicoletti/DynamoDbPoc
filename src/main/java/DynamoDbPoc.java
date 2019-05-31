@@ -51,39 +51,42 @@ public class DynamoDbPoc {
         addItems(dynamodbClient, startingFileId, timeBucketMonth, numberOfItems);
         break;
       case "query-items":
-        if (args.length != 2) {
-          System.out.println("Usage: query-items, time-bucket month");
+        if (args.length != 4) {
+          System.out.println("Usage: query-items, time-bucket month, start day, end day");
           System.exit(0);
         }
         timeBucketMonth = Integer.valueOf(args[1]);
-        queryItems(dynamodbClient, timeBucketMonth);
+        int startDay = Integer.valueOf(args[2]);
+        int endDay = Integer.valueOf(args[3]);
+        queryItems(dynamodbClient, timeBucketMonth, startDay, endDay);
         break;
       default:
         System.out.println("Unknown action: " + action);
     }
   }
 
-  private static void queryItems(AmazonDynamoDB dynamodbClient, int timeBucketMonth) {
+  private static void queryItems(AmazonDynamoDB dynamodbClient, int timeBucketMonth, int from, int to) {
 
     DynamoDB dynamoDB = new DynamoDB(dynamodbClient);
     Table table = dynamoDB.getTable(tableName);
     Index index = table.getIndex(gsiName);
 
     String timeBucket = String.format("%d%02d", localDateTime.getYear(), timeBucketMonth);
-    String gsiSearchKey = "mt:mscn:state:" + timeBucket;
+    String gsiFromSearchKey = String.format("mt:mscn:state:%s%02d000000", timeBucket, from);
+    String gsiToSearchKey =   String.format("mt:mscn:state:%s%02d999999", timeBucket, to);
     String timeBucketString = "mt:mscn:state:" + timeBucket;
-    String pkString = "mt:mscn:state:current-fileId-9";
 
-    QuerySpec querySpec = new QuerySpec().withKeyConditionExpression("sk = :v_sk and begins_with(gsisk, :v_gsisk)")
+    QuerySpec querySpec = new QuerySpec().withKeyConditionExpression("sk = :v_sk and gsisk BETWEEN :v_gsiskFrom AND :v_gsiskTo")
         .withValueMap(new ValueMap()
             //.withString(":v_pk", timeBucketString)
             .withString(":v_sk", timeBucketString)
-            .withString(":v_gsisk", gsiSearchKey));
+            .withString(":v_gsiskFrom", gsiFromSearchKey)
+            .withString(":v_gsiskTo", gsiToSearchKey));
 
-    System.out.println("Querying using sk = " + timeBucketString + ", gsisk begins with: " + gsiSearchKey);
+    System.out.println("Querying using sk = " + timeBucketString + ", gsisk between " + gsiFromSearchKey + " and " + gsiToSearchKey);
     ItemCollection<QueryOutcome> items = index.query(querySpec);
     System.out.println("Query returned:");
-    Iterator<Item> iterator = items.iterator();
+   Iterator<Item> iterator = items.iterator();
     while (iterator.hasNext()) {
       Item item = iterator.next();
       System.out.println("item: " + item.toJSONPretty());
