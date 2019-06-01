@@ -42,6 +42,7 @@ public class DynamoDbPoc {
     int timeBucketMonth = 0;
     int startingFileId  = 0;
     int numberOfItems  = 0;
+
     switch (action) {
       case "add-current-items":
         if (args.length != 4) {
@@ -67,9 +68,10 @@ public class DynamoDbPoc {
 
       case "query-current-items":
         if (args.length != 4 && args.length != 5) {
-          System.out.println("Usage: query-items, time-bucket month, start day, end day, state (optional)");
+          System.out.println("Usage: query-current-items, time-bucket month, start day, end day, state (optional)");
           System.exit(0);
         }
+
         timeBucketMonth = Integer.valueOf(args[1]);
         int startDay = Integer.valueOf(args[2]);
         int endDay = Integer.valueOf(args[3]);
@@ -78,9 +80,13 @@ public class DynamoDbPoc {
         queryCurrentItems(dynamodbClient, timeBucketMonth, startDay, endDay, state);
         break;
 
-        case "query-history-item":
-          String fileId = args[1];
-          queryItemHistory(dynamodbClient, fileId);
+        case "query-item-history":
+          if (args.length != 2) {
+            System.out.println("Usage: query-item-history fileId");
+            System.exit(0);
+          }
+
+          queryItemHistory(dynamodbClient, args[1]);
           break;
 
       default:
@@ -97,7 +103,7 @@ public class DynamoDbPoc {
     String timeBucket = String.format("%d%02d", localDateTime.getYear(), timeBucketMonth);
     String gsiFromSearchKey = String.format("%s%02d000000", timeBucket, fromDay);
     String gsiToSearchKey =   String.format("%s%02d999999", timeBucket, toDay);
-    String timeBucketString = "mt:mscn:current:" + timeBucket;
+    String timeBucketString = String.format("mt:mscn:current:%s", timeBucket);
 
     QuerySpec querySpec;
 
@@ -109,23 +115,25 @@ public class DynamoDbPoc {
           .withFilterExpression("#state = :v_state")
           .withNameMap(nameMap)
           .withValueMap(new ValueMap()
-          .withString(":v_state", state)
-          .withString(":v_sk", timeBucketString)
-          .withString(":v_gsiskFrom", gsiFromSearchKey)
-          .withString(":v_gsiskTo", gsiToSearchKey));
+              .withString(":v_state", state)
+              .withString(":v_sk", timeBucketString)
+              .withString(":v_gsiskFrom", gsiFromSearchKey)
+              .withString(":v_gsiskTo", gsiToSearchKey));
     } else {
       querySpec = new QuerySpec().withKeyConditionExpression("sk = :v_sk and gsisk BETWEEN :v_gsiskFrom AND :v_gsiskTo")
           .withValueMap(new ValueMap()
-          .withString(":v_sk", timeBucketString)
-          .withString(":v_gsiskFrom", gsiFromSearchKey)
-          .withString(":v_gsiskTo", gsiToSearchKey));
+              .withString(":v_sk", timeBucketString)
+              .withString(":v_gsiskFrom", gsiFromSearchKey)
+              .withString(":v_gsiskTo", gsiToSearchKey));
     }
 
     String queryDisplayString = String.format("Querying using sk = %s, gsisk between %s and %s, state: %s", timeBucketString, gsiFromSearchKey, gsiToSearchKey, state != null ? state : "ALL");
     System.out.println(queryDisplayString);
+
     ItemCollection<QueryOutcome> items = index.query(querySpec);
+
     System.out.println("Query returned:");
-   Iterator<Item> iterator = items.iterator();
+    Iterator<Item> iterator = items.iterator();
     while (iterator.hasNext()) {
       Item item = iterator.next();
       System.out.println("item: " + item.toJSONPretty());
@@ -139,9 +147,11 @@ public class DynamoDbPoc {
     String pkValue = String.format("mt:mscn:history:%s", fileId);
     QuerySpec querySpec = new QuerySpec().withKeyConditionExpression("pk = :v_pk")
         .withValueMap(new ValueMap()
-        .withString(":v_pk", pkValue));
+            .withString(":v_pk", pkValue));
+
     String queryDisplayString = String.format("Querying using pk = %s", pkValue);
     System.out.println(queryDisplayString);
+
     ItemCollection<QueryOutcome> items = table.query(querySpec);
     System.out.println("Query returned:");
     Iterator<Item> iterator = items.iterator();
