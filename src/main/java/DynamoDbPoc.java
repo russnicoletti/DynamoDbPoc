@@ -27,7 +27,7 @@ public class DynamoDbPoc {
   public static void main(String[] args) {
 
     if (args.length == 0) {
-      System.out.println("action must be supplied ('add-items' or 'query-items'");
+      System.out.println("action must be supplied ('add-current-items', 'add-history-items', or 'query-items'");
       System.exit(0);
     }
 
@@ -40,18 +40,32 @@ public class DynamoDbPoc {
         AmazonDynamoDBClientBuilder.standard().withRegion(region).build();
 
     int timeBucketMonth = 0;
+    int startingFileId  = 0;
+    int numberOfItems  = 0;
     switch (action) {
-      case "add-items":
+      case "add-current-items":
         if (args.length != 4) {
-          System.out.println("Usage: add-items, starting fileId number, time-bucket month, number of records");
+          System.out.println("Usage: add-current-items, starting fileId number, time-bucket month, number of records");
           System.exit(0);
         }
-        int startingFileId = Integer.valueOf(args[1]);
+        startingFileId = Integer.valueOf(args[1]);
         timeBucketMonth = Integer.valueOf(args[2]);
-        int numberOfItems = Integer.valueOf(args[3]);
-        addItems(dynamodbClient, startingFileId, timeBucketMonth, numberOfItems);
+        numberOfItems = Integer.valueOf(args[3]);
+        addItems(dynamodbClient, "current", startingFileId, timeBucketMonth, numberOfItems);
         break;
-      case "query-items":
+
+      case "add-history-items":
+        if (args.length != 4) {
+          System.out.println("Usage: add-history-items, starting fileId number, time-bucket month, number of records");
+          System.exit(0);
+        }
+        startingFileId = Integer.valueOf(args[1]);
+        timeBucketMonth = Integer.valueOf(args[2]);
+        numberOfItems = Integer.valueOf(args[3]);
+        addItems(dynamodbClient, "history", startingFileId, timeBucketMonth, numberOfItems);
+        break;
+
+      case "query-current-items":
         if (args.length != 4 && args.length != 5) {
           System.out.println("Usage: query-items, time-bucket month, start day, end day, state (optional)");
           System.exit(0);
@@ -61,24 +75,29 @@ public class DynamoDbPoc {
         int endDay = Integer.valueOf(args[3]);
 
         String state = args.length == 5 ? args[4] : null;
-        queryItems(dynamodbClient, timeBucketMonth, startDay, endDay, state);
+        queryCurrentItems(dynamodbClient, timeBucketMonth, startDay, endDay, state);
         break;
+
+        case "query-history-item":
+          String fileId = args[1];
+          queryItemHistory(dynamodbClient, fileId);
+          break;
+
       default:
         System.out.println("Unknown action: " + action);
     }
   }
 
-  private static void queryItems(AmazonDynamoDB dynamodbClient, int timeBucketMonth, int from, int to, String state) {
+  private static void queryCurrentItems(AmazonDynamoDB dynamodbClient, int timeBucketMonth, int fromDay, int toDay, String state) {
 
     DynamoDB dynamoDB = new DynamoDB(dynamodbClient);
     Table table = dynamoDB.getTable(tableName);
     Index index = table.getIndex(gsiName);
 
-    String stateString = (state != null) ? state : "";
     String timeBucket = String.format("%d%02d", localDateTime.getYear(), timeBucketMonth);
-    String gsiFromSearchKey = String.format("mt:mscn:state:%s%02d000000:%s", timeBucket, from, stateString);
-    String gsiToSearchKey =   String.format("mt:mscn:state:%s%02d999999:%s", timeBucket, to, stateString);
-    String timeBucketString = "mt:mscn:state:" + timeBucket;
+    String gsiFromSearchKey = String.format("%s%02d000000", timeBucket, fromDay);
+    String gsiToSearchKey =   String.format("%s%02d999999", timeBucket, toDay);
+    String timeBucketString = "mt:mscn:current:" + timeBucket;
 
     QuerySpec querySpec;
 
@@ -113,14 +132,33 @@ public class DynamoDbPoc {
     }
   }
 
-  private static void addItems(AmazonDynamoDB dynamodbClient, int startingFileId, int timeBucketMonth, int numberOfItems) {
+  private static void queryItemHistory(AmazonDynamoDB dynamodbClient, String fileId) {
+    DynamoDB dynamoDB = new DynamoDB(dynamodbClient);
+    Table table = dynamoDB.getTable(tableName);
+
+    String pkValue = String.format("mt:mscn:history:%s", fileId);
+    QuerySpec querySpec = new QuerySpec().withKeyConditionExpression("pk = :v_pk")
+          .withValueMap(new ValueMap()
+        .withString(":v_pk", pkValue));
+    String queryDisplayString = String.format("Querying using pk = %s", pkValue);
+    System.out.println(queryDisplayString);
+    ItemCollection<QueryOutcome> items = table.query(querySpec);
+    System.out.println("Query returned:");
+   Iterator<Item> iterator = items.iterator();
+    while (iterator.hasNext()) {
+      Item item = iterator.next();
+      System.out.println("item: " + item.toJSONPretty());
+    }
+  }
+
+  private static void addItems(AmazonDynamoDB dynamodbClient, String type, int startingFileId, int timeBucketMonth, int numberOfItems) {
     System.out.println("startingFileId: " + startingFileId + ", timeBucketMonth: " + timeBucketMonth + ", numberOfItems: " + numberOfItems);
 
     String state = getState("not-set");
     int dayOfTheMonth = 1;
     for (int i = startingFileId; i < startingFileId + numberOfItems; ++i) {
       try {
-        putOneItem(dynamodbClient, timeBucketMonth, i, state, dayOfTheMonth);
+        putOneItem(dynamodbClient, type, timeBucketMonth, i, state, dayOfTheMonth);
       } catch (Exception e) {
         System.exit(0);
       }
@@ -129,7 +167,7 @@ public class DynamoDbPoc {
     }
   }
 
-  private static void putOneItem (AmazonDynamoDB dynamodbClient,int timeBucketMonth,
+  private static void putOneItem (AmazonDynamoDB dynamodbClient, String type, int timeBucketMonth,
       int fileIdNumber, String state, int dayOfTheMonth){
 
     String fileId = "fileId-" + fileIdNumber;
@@ -141,13 +179,21 @@ public class DynamoDbPoc {
     String jsonContent =
         "{ \"fileId\": " + fileId + ", \"timestamp\": " + timestamp + ", \"state\": " + state + "}";
     Map<String, AttributeValue> attributeValueMap = new HashMap<>();
-    String pkValue = "mt:mscn:state:current-" + fileId;
-    String skValue = "mt:mscn:state:" + timeBucket;
-    String gsiskValue = "mt:mscn:state:" + timestamp + ":" + state + ":" + fileId;
+    String pkValue = String.format("mt:mscn:%s:%s", type, fileId);
+
+    String skValueTimeComponent = "unknown";
+    String gsiskValue  = null;
+    if (type.compareTo("current") == 0) {
+      gsiskValue = String.format("%s:%s",timestamp, fileId);
+      skValueTimeComponent = timeBucket;
+      attributeValueMap.put("gsisk", new AttributeValue(gsiskValue));
+      attributeValueMap.put("state", new AttributeValue(state));
+    } else if (type.compareTo("history") == 0) {
+      skValueTimeComponent = timestamp;
+    }
+    String skValue = String.format("mt:mscn:%s:%s", type, skValueTimeComponent);
     attributeValueMap.put("pk", new AttributeValue(pkValue));
     attributeValueMap.put("sk", new AttributeValue(skValue));
-    attributeValueMap.put("gsisk", new AttributeValue(gsiskValue));
-    attributeValueMap.put("state", new AttributeValue(state));
     attributeValueMap.put("data", new AttributeValue(jsonContent));
 
     try {
@@ -157,7 +203,7 @@ public class DynamoDbPoc {
       throw e;
     }
     System.out.println(
-        "Successfully added item: " + pkValue + ", " + skValue + ", " + gsiskValue + ") to "
+        "Successfully added item: (pk: " + pkValue + ", sk: " + skValue + ", gsisk: " + gsiskValue + ") to "
             + tableName);
   }
 
