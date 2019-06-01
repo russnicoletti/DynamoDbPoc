@@ -109,16 +109,16 @@ public class DynamoDbPoc {
           .withFilterExpression("#state = :v_state")
           .withNameMap(nameMap)
           .withValueMap(new ValueMap()
-              .withString(":v_state", state)
-              .withString(":v_sk", timeBucketString)
-              .withString(":v_gsiskFrom", gsiFromSearchKey)
-              .withString(":v_gsiskTo", gsiToSearchKey));
+          .withString(":v_state", state)
+          .withString(":v_sk", timeBucketString)
+          .withString(":v_gsiskFrom", gsiFromSearchKey)
+          .withString(":v_gsiskTo", gsiToSearchKey));
     } else {
       querySpec = new QuerySpec().withKeyConditionExpression("sk = :v_sk and gsisk BETWEEN :v_gsiskFrom AND :v_gsiskTo")
           .withValueMap(new ValueMap()
-              .withString(":v_sk", timeBucketString)
-              .withString(":v_gsiskFrom", gsiFromSearchKey)
-              .withString(":v_gsiskTo", gsiToSearchKey));
+          .withString(":v_sk", timeBucketString)
+          .withString(":v_gsiskFrom", gsiFromSearchKey)
+          .withString(":v_gsiskTo", gsiToSearchKey));
     }
 
     String queryDisplayString = String.format("Querying using sk = %s, gsisk between %s and %s, state: %s", timeBucketString, gsiFromSearchKey, gsiToSearchKey, state != null ? state : "ALL");
@@ -138,13 +138,13 @@ public class DynamoDbPoc {
 
     String pkValue = String.format("mt:mscn:history:%s", fileId);
     QuerySpec querySpec = new QuerySpec().withKeyConditionExpression("pk = :v_pk")
-          .withValueMap(new ValueMap()
+        .withValueMap(new ValueMap()
         .withString(":v_pk", pkValue));
     String queryDisplayString = String.format("Querying using pk = %s", pkValue);
     System.out.println(queryDisplayString);
     ItemCollection<QueryOutcome> items = table.query(querySpec);
     System.out.println("Query returned:");
-   Iterator<Item> iterator = items.iterator();
+    Iterator<Item> iterator = items.iterator();
     while (iterator.hasNext()) {
       Item item = iterator.next();
       System.out.println("item: " + item.toJSONPretty());
