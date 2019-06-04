@@ -110,8 +110,10 @@ public class DynamoDbPoc {
     if (state != null) {
       HashMap<String, String> nameMap = new HashMap<>();
       nameMap.put("#state", "state");
+      nameMap.put("#data", "data");
+
       querySpec = new QuerySpec().withKeyConditionExpression("pk = :v_pk and sk BETWEEN :v_skFrom AND :v_skTo")
-          .withProjectionExpression("#state")
+          .withProjectionExpression("#state, #data")
           .withFilterExpression("#state = :v_state")
           .withNameMap(nameMap)
           .withValueMap(new ValueMap()
