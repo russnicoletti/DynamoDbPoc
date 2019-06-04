@@ -14,6 +14,8 @@ import com.amazonaws.services.dynamodbv2.model.PutItemRequest;
 import com.amazonaws.services.pinpoint.model.Format;
 
 import java.time.LocalDateTime;
+import java.util.Calendar;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
@@ -52,7 +54,6 @@ public class DynamoDbPoc {
         startingFileId = Integer.valueOf(args[1]);
         timeBucketMonth = Integer.valueOf(args[2]);
         numberOfItems = Integer.valueOf(args[3]);
-        //addItems(dynamodbClient, "current", startingFileId, timeBucketMonth, numberOfItems);
         addItems(dynamodbClient, "current-list", startingFileId, timeBucketMonth, numberOfItems);
         break;
 
@@ -64,7 +65,7 @@ public class DynamoDbPoc {
         startingFileId = Integer.valueOf(args[1]);
         timeBucketMonth = Integer.valueOf(args[2]);
         numberOfItems = Integer.valueOf(args[3]);
-        addItems(dynamodbClient, "history", startingFileId, timeBucketMonth, numberOfItems);
+        addHistoryItems(dynamodbClient, "history", startingFileId, timeBucketMonth, numberOfItems);
         break;
 
       case "query-current-items":
@@ -170,23 +171,39 @@ public class DynamoDbPoc {
     int dayOfTheMonth = 1;
     for (int i = startingFileId; i < startingFileId + numberOfItems; ++i) {
       try {
-        putOneItem(dynamodbClient, type, timeBucketMonth, i, state, dayOfTheMonth);
+        putOneItem(dynamodbClient, type, timeBucketMonth, i, state, dayOfTheMonth++);
       } catch (Exception e) {
         System.exit(0);
       }
       state = getState(state);
-      dayOfTheMonth = getDayOfMonth(dayOfTheMonth);
+    }
+  }
+
+  private static void addHistoryItems(AmazonDynamoDB dynamodbClient, String type, int startingFileId, int timeBucketMonth, int numberOfItems) {
+    System.out.println("startingFileId: " + startingFileId + ", timeBucketMonth: " + timeBucketMonth + ", numberOfItems: " + numberOfItems);
+
+    String state = getState("not-set");
+    int dayOfTheMonth = 1;
+    for (int i = 0; i < numberOfItems; ++i) {
+      try {
+        putOneItem(dynamodbClient, type, timeBucketMonth, startingFileId, state, dayOfTheMonth++);
+      } catch (Exception e) {
+        System.exit(0);
+      }
+      state = getState(state);
     }
   }
 
   private static void putOneItem (AmazonDynamoDB dynamodbClient, String type, int timeBucketMonth,
       int fileIdNumber, String state, int dayOfTheMonth){
 
+    Calendar calendar = Calendar.getInstance();
+    calendar.setTime(new Date(System.currentTimeMillis()));
     String fileId = "fileId-" + fileIdNumber;
-    String timestamp = String.format("%d%02d%02d%02d%02d%02d",
+    String timestamp = String.format("%d%02d%02d%02d%02d%02d%03d",
         localDateTime.getYear(), timeBucketMonth,
         dayOfTheMonth, localDateTime.getHour(),
-        localDateTime.getMinute(), localDateTime.getSecond());
+        localDateTime.getMinute(), localDateTime.getSecond(), calendar.get(Calendar.MILLISECOND));
     String timeBucket = String.format("%d%02d", localDateTime.getYear(), timeBucketMonth);
     String jsonContent =
         "{ \"fileId\": " + fileId + ", \"timestamp\": " + timestamp + ", \"state\": " + state + "}";
@@ -241,9 +258,5 @@ public class DynamoDbPoc {
         return "PENDING";
     }
     return "";
-  }
-
-  private static int getDayOfMonth(int currentDayOfTheMonth) {
-    return ++currentDayOfTheMonth;
   }
 }
