@@ -52,7 +52,8 @@ public class DynamoDbPoc {
         startingFileId = Integer.valueOf(args[1]);
         timeBucketMonth = Integer.valueOf(args[2]);
         numberOfItems = Integer.valueOf(args[3]);
-        addItems(dynamodbClient, "current", startingFileId, timeBucketMonth, numberOfItems);
+        //addItems(dynamodbClient, "current", startingFileId, timeBucketMonth, numberOfItems);
+        addItems(dynamodbClient, "current-list", startingFileId, timeBucketMonth, numberOfItems);
         break;
 
       case "add-history-items":
@@ -98,39 +99,38 @@ public class DynamoDbPoc {
 
     DynamoDB dynamoDB = new DynamoDB(dynamodbClient);
     Table table = dynamoDB.getTable(tableName);
-    Index index = table.getIndex(gsiName);
 
     String timeBucket = String.format("%d%02d", localDateTime.getYear(), timeBucketMonth);
-    String gsiFromSearchKey = String.format("%s%02d000000", timeBucket, fromDay);
-    String gsiToSearchKey =   String.format("%s%02d999999", timeBucket, toDay);
-    String timeBucketString = String.format("mt:mscn:current:%s", timeBucket);
+    String fromSearchKey = String.format("mt:mscn:current-list:%s%02d000000", timeBucket, fromDay);
+    String toSearchKey =   String.format("mt:mscn:current-list:%s%02d999999", timeBucket, toDay);
+    String timeBucketString = String.format("mt:mscn:current-list:%s", timeBucket);
 
     QuerySpec querySpec;
 
     if (state != null) {
       HashMap<String, String> nameMap = new HashMap<>();
       nameMap.put("#state", "state");
-      querySpec = new QuerySpec().withKeyConditionExpression("sk = :v_sk and gsisk BETWEEN :v_gsiskFrom AND :v_gsiskTo")
+      querySpec = new QuerySpec().withKeyConditionExpression("pk = :v_pk and sk BETWEEN :v_skFrom AND :v_skTo")
           .withProjectionExpression("#state")
           .withFilterExpression("#state = :v_state")
           .withNameMap(nameMap)
           .withValueMap(new ValueMap()
               .withString(":v_state", state)
-              .withString(":v_sk", timeBucketString)
-              .withString(":v_gsiskFrom", gsiFromSearchKey)
-              .withString(":v_gsiskTo", gsiToSearchKey));
+              .withString(":v_pk", timeBucketString)
+              .withString(":v_skFrom", fromSearchKey)
+              .withString(":v_skTo", toSearchKey));
     } else {
-      querySpec = new QuerySpec().withKeyConditionExpression("sk = :v_sk and gsisk BETWEEN :v_gsiskFrom AND :v_gsiskTo")
+      querySpec = new QuerySpec().withKeyConditionExpression("pk = :v_pk and sk BETWEEN :v_skFrom AND :v_skTo")
           .withValueMap(new ValueMap()
-              .withString(":v_sk", timeBucketString)
-              .withString(":v_gsiskFrom", gsiFromSearchKey)
-              .withString(":v_gsiskTo", gsiToSearchKey));
+              .withString(":v_pk", timeBucketString)
+              .withString(":v_skFrom", fromSearchKey)
+              .withString(":v_skTo", toSearchKey));
     }
 
-    String queryDisplayString = String.format("Querying using sk = %s, gsisk between %s and %s, state: %s", timeBucketString, gsiFromSearchKey, gsiToSearchKey, state != null ? state : "ALL");
+    String queryDisplayString = String.format("Querying using pk = %s, sk between %s and %s, state: %s", timeBucketString, fromSearchKey, toSearchKey, state != null ? state : "ALL");
     System.out.println(queryDisplayString);
 
-    ItemCollection<QueryOutcome> items = index.query(querySpec);
+    ItemCollection<QueryOutcome> items = table.query(querySpec);
 
     System.out.println("Query returned:");
     Iterator<Item> iterator = items.iterator();
@@ -189,21 +189,31 @@ public class DynamoDbPoc {
     String jsonContent =
         "{ \"fileId\": " + fileId + ", \"timestamp\": " + timestamp + ", \"state\": " + state + "}";
     Map<String, AttributeValue> attributeValueMap = new HashMap<>();
-    String pkValue = String.format("mt:mscn:%s:%s", type, fileId);
+    String pkValue = null;
+    String skValue = "";
 
-    String skValueTimeComponent = "unknown";
-    String gsiskValue  = null;
-    if (type.compareTo("current") == 0) {
-      gsiskValue = String.format("%s:%s",timestamp, fileId);
-      skValueTimeComponent = timeBucket;
-      attributeValueMap.put("gsisk", new AttributeValue(gsiskValue));
-      attributeValueMap.put("state", new AttributeValue(state));
-    } else if (type.compareTo("history") == 0) {
-      skValueTimeComponent = timestamp;
+    switch (type) {
+      case "current":
+        pkValue = String.format("mt:mscn:current:%s", fileId);
+        attributeValueMap.put("pk", new AttributeValue(pkValue));
+        //attributeValueMap.put("sk", new AttributeValue(skValue));
+        break;
+
+      case "current-list":
+        pkValue = String.format("mt:mscn:current-list:%s", timeBucket);
+        skValue = String.format("mt:mscn:current-list:%s:%s", timestamp, fileId);
+        attributeValueMap.put("pk", new AttributeValue(pkValue));
+        attributeValueMap.put("sk", new AttributeValue(skValue));
+        attributeValueMap.put("state", new AttributeValue(state));
+        break;
+
+      case "history":
+        pkValue = String.format("mt:mscn:history:%s", fileId);
+        skValue = String.format("mt:mscn:history:%s", timestamp);
+        attributeValueMap.put("pk", new AttributeValue(pkValue));
+        attributeValueMap.put("sk", new AttributeValue(skValue));
+        break;
     }
-    String skValue = String.format("mt:mscn:%s:%s", type, skValueTimeComponent);
-    attributeValueMap.put("pk", new AttributeValue(pkValue));
-    attributeValueMap.put("sk", new AttributeValue(skValue));
     attributeValueMap.put("data", new AttributeValue(jsonContent));
 
     try {
@@ -213,7 +223,7 @@ public class DynamoDbPoc {
       throw e;
     }
     System.out.println(
-        "Successfully added item: (pk: " + pkValue + ", sk: " + skValue + ", gsisk: " + gsiskValue + ") to "
+        "Successfully added item: (pk: " + pkValue + ", sk: " + skValue + ", data: " + jsonContent + ") to "
             + tableName);
   }
 
