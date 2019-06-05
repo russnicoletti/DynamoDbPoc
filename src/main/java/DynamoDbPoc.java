@@ -2,7 +2,6 @@ import com.amazonaws.regions.Regions;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
 import com.amazonaws.services.dynamodbv2.document.DynamoDB;
-import com.amazonaws.services.dynamodbv2.document.Index;
 import com.amazonaws.services.dynamodbv2.document.Item;
 import com.amazonaws.services.dynamodbv2.document.ItemCollection;
 import com.amazonaws.services.dynamodbv2.document.QueryOutcome;
@@ -11,7 +10,6 @@ import com.amazonaws.services.dynamodbv2.document.spec.QuerySpec;
 import com.amazonaws.services.dynamodbv2.document.utils.ValueMap;
 import com.amazonaws.services.dynamodbv2.model.AttributeValue;
 import com.amazonaws.services.dynamodbv2.model.PutItemRequest;
-import com.amazonaws.services.pinpoint.model.Format;
 
 import java.time.LocalDateTime;
 import java.util.Calendar;
@@ -29,7 +27,7 @@ public class DynamoDbPoc {
   public static void main(String[] args) {
 
     if (args.length == 0) {
-      System.out.println("action must be supplied ('add-current-items', 'add-history-items', or 'query-items'");
+      System.out.println("action must be supplied ('add-current-items', 'add-history-items', or 'query-current-items', 'query-item-history''");
       System.exit(0);
     }
 
@@ -215,7 +213,6 @@ public class DynamoDbPoc {
       case "current":
         pkValue = String.format("mt:mscn:current:%s", fileId);
         attributeValueMap.put("pk", new AttributeValue(pkValue));
-        //attributeValueMap.put("sk", new AttributeValue(skValue));
         break;
 
       case "current-list":
